@@ -1,65 +1,34 @@
 apiVersion: tekton.dev/v1beta1
 kind: Task
 metadata:
-  name: build-java-app
+  name: build-docker-image
+  namespace: tekton-pipelines
 spec:
   params:
-  - name: buildRevision
-  - name: appGitUrl
-  - name: appImage
-  workspaces:
-  - name: app-source
-
+  - name: pathToContext
+    description:
+      The build directory used by img
+    default: /workspace/source-repo
+  - name: pathToDockerFile
+    type: string
+    description: The path to the dockerfile to build
+    default: $(resources.inputs.source-repo.path)/Dockerfile
+  resources:
+    inputs:
+      - name: source-repo
+        type: git
+    outputs:
+      - name: builtImage
+        type: image
   steps:
-  - name: git-checkout
-    image: alpine/git:v2.26.2
-    workingDir: "$(workspaces.app-source.path)"
-    script: |
-      #!/usr/bin/env sh
-      set -e
-
-      eval $(ssh-agent)
-      ssh-add ~/.ssh/id_*
-      git config --global core.sshCommand 'ssh -o StrictHostKeyChecking=accept-new'
-
-      git init
-      git remote add origin $(params.appGitUrl)
-      git fetch --depth 1 origin $(params.buildRevision)
-      git checkout FETCH_HEAD
-
-  - name: build-sources
-    image: sdaschner/maven-jdk14:quarkus-deps-1.5.1-b5
-    workingDir: "$(workspaces.app-source.path)/app"
-    command:
-    - /usr/bin/mvn
-    args:
-    - clean
-    - package
-
-  - name: build-image
-    image: quay.io/buildah/stable
-    workingDir: "$(workspaces.app-source.path)/app"
-    command: ['buildah', 'bud', '--tls-verify=false', '--layers', '-f', 'Dockerfile', '-t', '$(params.appImage):$(params.buildRevision)', '.']
-    volumeMounts:
-    - name: varlibc
-      mountPath: /var/lib/containers
-    securityContext:
-      allowPrivilegeEscalation: true
-      runAsUser: 0
-      privileged: true
-
-  - name: build-push
-    image: quay.io/buildah/stable
-    command: ["buildah", "push", "--tls-verify=false", "$(params.appImage):$(params.buildRevision)", "docker://$(params.appImage):$(params.buildRevision)"]
-    volumeMounts:
-    - name: varlibc
-      mountPath: /var/lib/containers
-    securityContext:
-      allowPrivilegeEscalation: true
-      runAsUser: 0
-      privileged: true
-
-  volumes:
-  - name: varlibc
-    emptyDir: {}
----
+    - name: build-and-push
+      image: gcr.io/kaniko-project/executor:latest
+      env:
+        - name: DOCKER_CONFIG
+          value: /tekton/home/.docker/
+      command:
+        - /kaniko/executor
+      args:
+        - --dockerfile=$(params.pathToDockerFile)
+        - --destination=$(resources.outputs.builtImage.url)
+        - --context=$(params.pathToContext)

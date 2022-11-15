@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: el-github-listener-interceptor
+  namespace: tekton-pipelines
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+  - secretName: event-listener-tls
+    hosts:
+    - build.smartdevops.uk
+  rules:
+  - host: build.smartdevops.uk
+    http:
+      paths:
+      - pathType: ImplementationSpecific
+        backend:
+          service:
+            name: el-github-listener-interceptor
+            port:
+              number: 8080

@@ -9,8 +9,8 @@ spec:
     server: https://kubernetes.default.svc
   project: default
   source:
-    path: systemtest
-    repoURL: https://github.com/example/app-config.git
+    path: deploy
+    repoURL: https://github.com/simonlaw0711/docker-reactjs.git
     targetRevision: HEAD
   syncPolicy:
     automated:

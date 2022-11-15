@@ -3,6 +3,11 @@ kind: Pipeline
 metadata:
   name: build-deploy
 spec:
+  resources:
+    - name: source-repo
+      type: git
+    - name: image-source
+      type: image
   params:
   - name: buildRevision
     description: The revision of the build, i.e. the commit revision of the application repository
@@ -17,28 +22,30 @@ spec:
   - name: config-source
 
   tasks:
-  - name: build-java-app
+  - name: build-docker-image
+    retries: 2
     taskRef:
-      name: build-java-app
+      name: build-docker-image
     params:
-    - name: buildRevision
-      value: $(params.buildRevision)
-    - name: appGitUrl
-      value: $(params.appGitUrl)
-    - name: appImage
-      value: $(params.appImage)
-    workspaces:
-    - name: app-source
-      workspace: app-source
+      - name: pathToContext
+        value: /workspace/source-repo
+    resources:
+      inputs:
+        - name: source-repo
+          resource: source-repo
+      outputs:
+        - name: builtImage
+          resource: image-source
 
   - name: deploy-systemtest
+    retries: 2
     taskRef:
       name: deploy
     runAfter:
-    - build-java-app
+    - build-docker-image
     params:
     - name: environment
-      value: systemtest
+      value: deploy
     - name: argo-app-name
       value: app-systemtest
     - name: configGitUrl
@@ -51,30 +58,30 @@ spec:
     - name: config-source
       workspace: config-source
 
-  - name: run-systemtest
-    taskRef:
-      name: run-systemtest
-    runAfter:
-    - deploy-systemtest
-    params:
-    - name: gateway
-      value: 'systemtest.example.com'
-    - name: appGitUrl
-      value: $(params.appGitUrl)
-    - name: buildRevision
-      value: $(params.buildRevision)
-    workspaces:
-    - name: app-source
-      workspace: app-source
+  # - name: run-systemtest
+  #   taskRef:
+  #     name: run-systemtest
+  #   runAfter:
+  #   - deploy-systemtest
+  #   params:
+  #   - name: gateway
+  #     value: 'systemtest.example.com'
+  #   - name: appGitUrl
+  #     value: $(params.appGitUrl)
+  #   - name: buildRevision
+  #     value: $(params.buildRevision)
+  #   workspaces:
+  #   - name: app-source
+  #     workspace: app-source
 
   - name: deploy-prod
     taskRef:
       name: deploy
     runAfter:
-    - run-systemtest
+    - deploy-systemtest
     params:
     - name: environment
-      value: production
+      value: deploy
     - name: argo-app-name
       value: app-prod
     - name: configGitUrl
@@ -86,21 +93,34 @@ spec:
     workspaces:
     - name: config-source
       workspace: config-source
-
-  - name: run-prod-smoketest
-    taskRef:
-      name: run-smoketest
-    runAfter:
-    - deploy-prod
-    params:
-    - name: gateway
-      value: 'example.com'
-    - name: buildRevision
-      value: $(params.buildRevision)
-    - name: appGitUrl
-      value: $(params.appGitUrl)
-    workspaces:
-    - name: app-source
-      workspace: app-source
+  finally:
+    - name: notify-any-failure # executed only when one or more tasks fail
+      when:
+        - input: $(tasks.status)
+          operator: in
+          values: ["Failed"]
+      taskRef:
+        name: send-to-chat-tg
+      params:
+      - name: bot-token	
+        value: tg-bot-token
+      - name: chat-id
+        value: '-457905307'
+      - name: message
+        value: 'Build or deploy failed, go to https://tekton.smartdevops.uk/#/namespaces/tekton-pipelines/pipelineruns to check log.'
+    - name: notify-success # executed only when one or more tasks fail
+      when:
+        - input: $(tasks.status)
+          operator: in
+          values: ["Succeeded"]
+      taskRef:
+        name: send-to-chat-tg
+      params:
+      - name: bot-token	
+        value: tg-bot-token
+      - name: chat-id
+        value: '-457905307'
+      - name: message
+        value: 'Build Succeeded and deployed to UAT environment, waiting for UAT test'
 ---
 

@@ -2,22 +2,38 @@ apiVersion: tekton.dev/v1beta1
 kind: PipelineRun
 metadata:
   generateName: build-deploy-
+  namespace: tekton-pipelines
 spec:
-  pipelineRef:
-    name: build-deploy
   serviceAccountName: pipeline
   params:
   - name: buildRevision
-    value: 'd9c7ccb0713da882d8373169e2a1d705f5959386'
+    value: 'master'
   - name: appGitUrl
-    value: 'git@github.com:example/app.git'
+    value: 'git@github.com:simonlaw0711/docker-reactjs.git'
   - name: configGitUrl
-    value: 'git@github.com:example/app-config.git'
+    value: 'git@github.com:simonlaw0711/docker-reactjs.git'
   - name: appImage
-    value: 'docker.example.com/app'
+    value: 'gcr.io/dev-playground-366808/my-app'
   workspaces:
   - name: app-source
     emptyDir: {}
   - name: config-source
     emptyDir: {}
+  pipelineRef:
+    name: build-deploy
+  resources:
+    - name: source-repo
+      resourceSpec:
+        type: git
+        params:
+        - name: revision
+          value: master
+        - name: url
+          value: git@github.com:simonlaw0711/docker-reactjs.git
+    - name: image-source
+      resourceSpec:
+        type: image
+        params:
+          - name: url
+            value: gcr.io/dev-playground-366808/my-app  
 ---
